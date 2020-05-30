@@ -329,6 +329,11 @@ StateBLine::~StateBLine()
 {
 }
 
+void* StateBLine::enter_state(studio::CanvasView* machine_context) const
+{
+	return new StateBLine_Context(machine_context);
+}
+
 void
 StateBLine_Context::load_settings()
 {
@@ -1409,7 +1414,9 @@ StateBLine_Context::refresh_ducks(bool button_down)
 		duck=new WorkArea::Duck(bline_point.get_vertex());
 		duck->set_editable(true);
 #ifdef DISTINGUISH_FIRST_DUCK
-		if (iter!=bline_point_list.begin())
+		if (iter==bline_point_list.begin())
+			duck->set_type(Duck::TYPE_FIRST_VERTEX);
+		else
 			duck->set_type(Duck::TYPE_VERTEX);
 #else
 		duck->set_type(Duck::TYPE_VERTEX);
@@ -1764,7 +1771,7 @@ StateBLine_Context::popup_vertex_menu(synfig::ValueNode_Const::Handle value_node
 	item->show();
 	menu.append(*item);
 
-	menu.popup(0,0);
+	menu.popup(0, gtk_get_current_event_time());
 }
 
 void
@@ -1803,7 +1810,8 @@ StateBLine_Context::popup_bezier_menu(float location, synfig::ValueNode_Const::H
 		item->show();
 		menu.append(*item);
 	}
-	menu.popup(0,0);
+
+	menu.popup(0, gtk_get_current_event_time());
 }
 
 void
@@ -1963,7 +1971,7 @@ StateBLine_Context::popup_handle_menu(synfig::ValueNode_Const::Handle value_node
 	item->show();
 	menu.append(*item);
 
-	menu.popup(0,0);
+	menu.popup(0, gtk_get_current_event_time());
 }
 
 void

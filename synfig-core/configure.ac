@@ -108,6 +108,7 @@ AC_ARG_WITH(magickpp,
 ],[
 	with_magickpp="yes"
 ])
+AM_CONDITIONAL(HAVE_LIBMAGICKPP,false)
 if test $with_magickpp = "yes" ; then {
 	PKG_CHECK_MODULES(MAGICKPP, Magick++ >= 6.4.2,[
 		with_magickpp="yes"
@@ -115,8 +116,7 @@ if test $with_magickpp = "yes" ; then {
 		CONFIG_DEPS="$CONFIG_DEPS Magick++"
 	],[
 		with_magickpp="no"
-		AC_MSG_RESULT([ *** Magick++ Output target disabled])
-		AM_CONDITIONAL(HAVE_LIBMAGICKPP,false)
+		AC_MSG_ERROR([ *** Unable to find Magick++])
 	])
 } ; fi
 
@@ -166,7 +166,7 @@ AC_ARG_WITH(libavcodec,
 ])
 
 if test $with_libavcodec != "no" ; then {
-	PKG_CHECK_MODULES(LIBAVCODEC, [libavcodec >= 51.42 libavformat >= 54.0 libavutil >= 52.9 libswscale >= 2.1.2],
+	PKG_CHECK_MODULES(LIBAVCODEC, [libavcodec >= 57.0 libavformat >= 57.0 libavutil >= 55.0 libswscale >= 4.0],
 		[CONFIG_DEPS="$CONFIG_DEPS libavcodec libavformat libswscale"],
 		[echo no; with_libavcodec="no"])
 } ; fi

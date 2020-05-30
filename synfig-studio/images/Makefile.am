@@ -393,6 +393,7 @@ CLEANFILES = \
 	$(IMAGES) \
 	$(ICONS) \
 	$(SPLASH_DEV) \
+	logo_tmp.sif \
 	images.nsh \
 	unimages.nsh \
 	installer_logo.bmp \
@@ -420,12 +421,12 @@ SUFFIXES = .sif .tif .png .sifz .bmp
 #.SUFFIXES: $(SUFFIXES)
 
 .sifz.ico:
-	bash ../build_tools/sif2ico.sh $<
+	bash $(srcdir)/../build_tools/sif2ico.sh $<
 	echo "  File \"images\\$@\"" >>./icons.nsh
 	echo "  Delete \"\$$INSTDIR\\share\\pixmaps\\$@\"" >>./unicons.nsh
 
 .sif.ico:
-	bash ../build_tools/sif2ico.sh $<
+	bash $(srcdir)/../build_tools/sif2ico.sh $<
 	echo "  File \"images\\$@\"" >>./icons.nsh
 	echo "  Delete \"\$$INSTDIR\\share\\pixmaps\\$@\"" >>./unicons.nsh
 

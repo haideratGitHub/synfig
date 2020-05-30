@@ -5,9 +5,6 @@ synfigstudio.keys.in
 plugins/add-skeleton-simple/plugin.xml.in
 plugins/lottie-exporter/plugin.xml.in
 plugins/view-unhide-all-layers/plugin.xml.in
-ui/canvas_options.ui
-ui/preview_options.ui
-ui/dialog_workspaces.ui
 src/brushlib/brushsettings.py
 src/gui/actionmanagers/groupactionmanager.cpp
 src/gui/actionmanagers/groupactionmanager.h
@@ -94,6 +91,7 @@ src/gui/docks/dock_soundwave.h
 src/gui/docks/dock_soundwave.cpp
 src/gui/docks/dock_timetrack.cpp
 src/gui/docks/dock_timetrack.h
+src/gui/docks/dock_timetrack2.cpp
 src/gui/docks/dock_toolbox.cpp
 src/gui/docks/dock_toolbox.h
 src/gui/docks/dockable.cpp
@@ -213,6 +211,7 @@ src/gui/widgets/widget_time.cpp
 src/gui/widgets/widget_time.h
 src/gui/widgets/widget_timeslider.cpp
 src/gui/widgets/widget_timeslider.h
+src/gui/widgets/widget_timetrack.cpp
 src/gui/widgets/widget_value.cpp
 src/gui/widgets/widget_value.h
 src/gui/widgets/widget_vector.cpp
@@ -518,3 +517,8 @@ src/synfigapp/value_desc.h
 # Disabled because they are not built
 # src/template.cpp
 # src/template.h
+
+# Now, UI xml files
+ui/canvas_options.glade
+ui/preview_options.glade
+ui/dialog_workspaces.glade

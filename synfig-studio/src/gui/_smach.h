@@ -27,19 +27,15 @@
 
 /* === H E A D E R S ======================================================= */
 
+#include <cassert>
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
-#include "_misc.h"
 
 /* === M A C R O S ========================================================= */
 
 #define SMACH_STATE_STACK_SIZE		(32)
 
-#ifdef _MSC_VER
-#pragma warning (disable:4786)
-#pragma warning (disable:4290) // MSVC6 doesn't like function declarations with exception specs
-#endif
 
 /* === T Y P E D E F S ===================================================== */
 
@@ -221,10 +217,49 @@ public:
 
 	protected:
 
-		virtual void* enter_state(context_type* machine_context)const
+		/*
+		This part compiles differently in gcc/clang and MSVC compilers.
+		Since the behavior of the compiler is not specified for virtual methods
+		(C++11 standard says: § 14.7.1.10. "It is unspecified whether or not an
+		implementation implicitly instantiates a virtual member function of a
+		class template if the virtual member function would not otherwise be instantiated").
+
+		Unlike GCC/Clang, MSVC expects the template class to be fully defined
+		at the moment, so this code does not compile. Therefore, we move
+		the `enter_state` method to derived classes.
+
+		Minimal working example:
+		```
+		template <class T>
+		class A {
+		virtual void* Run() {
+			return new T();
+		}
+		};
+
+		class C;
+
+		class B : A<C> {
+		
+		};
+		```
+
+		MSVC fails with the error:
+		```
+		<source>(4): error C2027: use of undefined type 'C'
+		<source>(8): note: see declaration of 'C'
+		<source>(3): note: while compiling class template member function 'void *A<C>::Run(void)'
+		<source>(10): note: see reference to class template instantiation 'A<C>' being compiled
+		Compiler returned: 2
+		```
+
+		This code can be tested online at https://godbolt.org		
+		*/
+
+		/*virtual void* enter_state(context_type* machine_context)const
 		{
 			return new state_context_type(machine_context);
-		}
+		}*/
 
 		virtual bool leave_state(void* x)const
 		{
@@ -267,6 +302,21 @@ public:
 			return ret;
 		}
 	};
+	
+	class guard {
+	private:
+		bool *flag;
+	public:
+		explicit guard(bool &flag): flag() {
+			assert(!flag);
+			if (!flag) { flag = true; this->flag = &flag; }
+		}
+		~guard()
+			{ if (flag) *flag = false;}
+		operator bool() const
+			{ return flag != nullptr; }
+	};
+
 
 private:
 
@@ -282,6 +332,9 @@ private:
 	const state_base* 	state_stack[SMACH_STATE_STACK_SIZE];
 	void* 				state_context_stack[SMACH_STATE_STACK_SIZE];
 	int 				states_on_stack;
+	
+	bool changing_state;
+	bool changing_default_state;
 
 public:
 
@@ -306,36 +359,35 @@ public:
 	bool
 	set_default_state(const state_base *nextstate)
 	{
+		guard lock(changing_default_state);
+		if (!lock) return false;
+		
 		// Keep track of the current state unless
 		// the state switch fails
-		const state_base *prev_state=default_state;
+		const state_base *prev_state = default_state;
+		void *prev_context = default_context;
 
-		// If we are already in a state, leave it and
-		// collapse the state stack
-		if(default_state && default_context)
-			default_state->leave_state(default_context);
-
-		// Set this as our current state
-		default_state=nextstate;
-		default_context=0;
-
+		default_state = 0;
+		default_context = 0;
+		
+		// If we are already in a state, leave it
+		if (prev_state && prev_context)
+			prev_state->leave_state(prev_context);
+		
 		// Attempt to enter the state
-		if(default_state)
-		{
-			default_context=default_state->enter_state(machine_context);
-			if(default_context)
+		default_state=nextstate;
+		if (default_state) {
+			default_context = default_state->enter_state(machine_context);
+			if (default_context)
 				return true;
 		}
-		else
-			return true;
 
 		// We failed, so attempt to return to previous state
-		default_state=prev_state;
-
-		// If we had a previous state, enter it
-		if(default_state) {
-			default_context=default_state->enter_state(machine_context);
-			if (!default_context) default_context=0;
+		default_state = prev_state;
+		if (default_state) {
+			default_context = default_state->enter_state(machine_context);
+			if (!default_context)
+				default_state = 0;
 		}
 
 		// At this point we are not in the
@@ -348,23 +400,28 @@ public:
 	bool
 	egress()
 	{
-		// Pop all states off the state stack
-		while(states_on_stack) pop_state();
+		// Try to pop all states off the state stack, before lock
+		while(states_on_stack)
+			if (!pop_state()) return false;
 
+		guard lock(changing_state);
+		if (!lock) return false;
+		
 		// If we are not in a state, then I guess
 		// we were successful.
-		if(!curr_state)
+		if (!curr_state)
 			return true;
 
-		const state_base* old_state=curr_state;
-		void *old_context=state_context;
+		const state_base* old_state = curr_state;
+		void *old_context = state_context;
 
 		// Clear out the current state and its state_context
-		curr_state=0;state_context=0;
+		curr_state = 0;
+		state_context = 0;
 
 		// Leave the state
 		if (old_state && old_context)
-			return old_state->leave_state(old_context);
+			old_state->leave_state(old_context);
 
 		return true;
 	}
@@ -376,31 +433,35 @@ public:
 	bool
 	enter(const state_base *nextstate)
 	{
+		guard lock(changing_state);
+		if (!lock) return false;
+
 		// Keep track of the current state unless
 		// the state switch fails
 		const state_base *prev_state=curr_state;
 
 		// If we are already in a state, leave it and
 		// collapse the state stack
-		if(curr_state)
-			egress();
-
-		// Set this as our current state
-		curr_state=nextstate;
-		state_context=0;
+		changing_state = false;
+		egress();
+		assert(!state_context);
+		state_context = 0;
+		changing_state = true;
 
 		// Attempt to enter the state
-		state_context=curr_state->enter_state(machine_context);
-		if(state_context)
-			return true;
-
-		// We failed, so attempt to return to previous state
-		curr_state=prev_state;
-
+		curr_state = nextstate;
+		if (curr_state) {
+			state_context = curr_state->enter_state(machine_context);
+			if (state_context)
+				return true;
+		}
+		
 		// If we had a previous state, enter it
-		if(curr_state) {
-			state_context=curr_state->enter_state(machine_context);
-			if (!state_context) curr_state = 0;
+		curr_state = prev_state;
+		if (curr_state) {
+			state_context = curr_state->enter_state(machine_context);
+			if (!state_context)
+				curr_state = 0;
 		}
 
 		// At this point we are not in the
@@ -417,58 +478,69 @@ public:
 	bool
 	push_state(const state_base *nextstate)
 	{
+		// If there is no current state,
+		// just go ahead and enter the given state.
+		// before locking
+		if (!curr_state)
+			return enter(nextstate);
+		
+		guard lock(changing_state);
+		if (!lock) return false;
+
 		// If there are not enough slots, then throw something.
-		if(states_on_stack==SMACH_STATE_STACK_SIZE)
+		if (states_on_stack==SMACH_STATE_STACK_SIZE)
 			throw(std::overflow_error("smach<>::push_state(): state stack overflow!"));
 
-		// If there is no current state, nor anything on stack,
-		// just go ahead and enter the given state.
-		if(!curr_state && !states_on_stack)
-			return enter(nextstate);
-
 		// Push the current state onto the stack
-		state_stack[states_on_stack]=curr_state;
-		state_context_stack[states_on_stack++]=state_context;
-
-		// Make the next state the current state
-		curr_state=nextstate;
+		state_stack[states_on_stack] = curr_state;
+		state_context_stack[states_on_stack++] = state_context;
 
 		// Try to enter the next state
-		state_context=curr_state->enter_state(machine_context);
-		if(state_context)
-			return true;
+		state_context = 0;
+		curr_state = nextstate;
+		if (curr_state) {
+			state_context = curr_state->enter_state(machine_context);
+			if (state_context)
+				return true;
+		}
 
 		// Unable to push state, return to old one
-		curr_state=state_stack[--states_on_stack];
-		state_context=state_context_stack[states_on_stack];
+		curr_state = state_stack[--states_on_stack];
+		state_context = state_context_stack[states_on_stack];
 		return false;
 	}
 
 	//! Pops state off of state stack
 	/*! Decreases state depth */
-	void
+	bool
 	pop_state()
 	{
-		// If we aren't in a state, then there is nothing
-		// to do.
-		if(!curr_state)
-			throw(std::underflow_error("smach<>::pop_state(): stack is empty!"));
+		{ // scope for locking
+			guard lock(changing_state);
+			if (!lock) return false;
+			
+			// If we aren't in a state, then there is nothing
+			// to do.
+			if (!curr_state && !states_on_stack)
+				throw(std::underflow_error("smach<>::pop_state(): stack is empty!"));
 
-		if(states_on_stack)
-		{
-			const state_base* old_state=curr_state;
-			void *old_context=state_context;
+			if (states_on_stack) {
+				const state_base* old_state = curr_state;
+				void *old_context = state_context;
 
-			// Pop previous state off of stack
-			--states_on_stack;
-			curr_state=state_stack[states_on_stack];
-			state_context=state_context_stack[states_on_stack];
+				// Pop previous state off of stack
+				--states_on_stack;
+				curr_state = state_stack[states_on_stack];
+				state_context = state_context_stack[states_on_stack];
 
-			if (old_state && old_context)
-				old_state->leave_state(old_context);
+				if (old_state && old_context)
+					old_state->leave_state(old_context);
+				return true;
+			}
 		}
-		else // If there are no states on stack, just egress
-			egress();
+		
+		// call egress with changing_state unlocked
+		return egress();
 	}
 
 	//! State Machine Constructor
@@ -480,16 +552,30 @@ public:
 		machine_context(machine_context),
 		default_state(0),
 		default_context(0),
-		states_on_stack(0)
+		states_on_stack(0),
+		changing_state(false),
+		changing_default_state(false)
 	{ }
 
 	//! The destructor
 	~smach()
 	{
+		assert(!changing_state);
+		changing_state = false;
 		egress();
 
-		if(default_state && default_context)
-			default_state->leave_state(default_context);
+		// reset default state
+		assert(!changing_default_state);
+		changing_default_state = false;
+		const state_base *prev_state = default_state;
+		void* prev_context = default_context;
+		default_state=0;
+		default_context=0;
+		if (prev_state && prev_context)
+			prev_state->leave_state(prev_context);
+
+		assert(!default_state && !default_context);
+		assert(!curr_state && !state_context);
 	}
 
 	//! Sets up a child state machine

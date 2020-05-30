@@ -47,6 +47,7 @@
 #include <ETL/calculus>
 #include <synfig/segment.h>
 #include <synfig/curve_helper.h>
+#include <algorithm> // for std::swap
 
 #endif
 
@@ -190,7 +191,6 @@ synfig::find_closest_point(const ValueBase &bline, const Point &pos, Real radius
 	const ValueBase::List &list = bline.get_list();
 	int size = (int)list.size();
 	int count = loop ? size : size - 1;
-	if (!loop) --count;
 	
 	for(int i0 = 0; i0 < count; ++i0) {
 		int i1 = (i0 + 1) % size;
@@ -777,7 +777,7 @@ ValueNode_BLine::operator()(Time t)const
 					curr_coord_sys[1]=curr_coord_sys[0].perp();
 
 					// Invert (transpose) the last of these matrices, since we use it for transform back
-					swap(curr_coord_sys[0][1],curr_coord_sys[1][0]);
+					std::swap(curr_coord_sys[0][1],curr_coord_sys[1][0]);
 				}
 
 				/* The code that was here before used just end_iter as the origin, rather than the mid-point */
